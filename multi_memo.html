@@ -467,7 +467,14 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(event.target.result, 'text/html');
             const savedContent = doc.querySelector('#saved-content');
-            editor.innerHTML = savedContent ? savedContent.innerHTML : doc.body.innerHTML;
+            
+            // 保存されたコンテンツがあればそれを、なければ全体のテキストを表示(コード編集モードとみなす)
+            if (savedContent) {
+                editor.innerHTML = savedContent.innerHTML;
+            } else {
+                // 普通のHTMLファイルを読み込んだ場合、ソースコードとして表示する
+                editor.innerText = event.target.result;
+            }
           } else {
             editor.innerText = event.target.result;
           }
@@ -519,16 +526,25 @@
             }
 
             let finalContent = '', mime = 'text/plain';
+            const rawText = editor.innerText.trim();
+
             if (ext === 'html') {
-                mime = 'text/html; charset=utf-8'; // charset追加
-                finalContent = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>body{font-family:sans-serif;padding:20px;line-height:1.6;max-width:800px;margin:0 auto}img,video{max-width:100%;height:auto}audio{width:100%}</style></head><body><div id="saved-content">${contentClone.innerHTML}</div></body></html>`;
+                mime = 'text/html; charset=utf-8';
+                
+                // ★判定ロジック追加: 内容が "<!DOCTYPE" や "<html" で始まるならソースコードとみなす
+                if (rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+                    finalContent = editor.innerText; // そのままテキストとして保存(コード)
+                } else {
+                    // 通常のメモとして保存（リッチテキスト枠をつける）
+                    finalContent = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>body{font-family:sans-serif;padding:20px;line-height:1.6;max-width:800px;margin:0 auto}img,video{max-width:100%;height:auto}audio{width:100%}</style></head><body><div id="saved-content">${contentClone.innerHTML}</div></body></html>`;
+                }
             } else {
                 finalContent = editor.innerText;
                 if(ext === 'md') mime = 'text/markdown; charset=utf-8';
                 else mime = 'text/plain; charset=utf-8';
             }
 
-            // ★修正ポイント: BOM ('\uFEFF') を先頭に付与してBlobを作成
+            // BOM ('\uFEFF') を先頭に付与
             const blob = new Blob(['\uFEFF', finalContent], { type: mime });
 
             if (mode === 'share') {
