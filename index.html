@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#2c3e50">
   
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📸</text></svg>">
-  <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBzdHlsZT0iYmFja2dyb3VuZC1jb2xvcjojZTc0YzNjIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjE1JSIgZmlsbD0iI2U3NGMzYyIvPjxwYXRoIGQ9Ik0xMjggMTI4djI1NmgyNTZWMTI4SDEyOHptMzIgMzJowTkydjE5MmgtMTkyVjE2MHptNDggNDh2OTZsODAtNDgtODAtNDh6IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✏️</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22 style=%22background-color: white;%22><rect width=%22100%22 height=%22100%22 fill=%22white%22/><text x=%2250%25%22 y=%2255%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2280%22>✏️</text></svg>">
 
   <style>
     /* --- CSS設定 --- */
@@ -86,12 +86,11 @@
     }
     .btn-icon { font-size: 20px; min-width: 40px; padding: 0; }
     
-    /* ボタンの色設定 */
     .btn-open { background-color: #7f8c8d; }
-    .btn-camera { background-color: #e74c3c; } /* 写真 */
-    .btn-video { background-color: #9b59b6; }  /* 動画 (紫) */
-    .btn-mic { background-color: #c0392b; }    /* 録音 (濃い赤) */
-    .btn-media { background-color: #e67e22; }  /* アルバム挿入 */
+    .btn-camera { background-color: #e74c3c; }
+    .btn-video { background-color: #9b59b6; }
+    .btn-mic { background-color: #c0392b; }
+    .btn-media { background-color: #e67e22; }
     .btn-save { background-color: #3498db; }
     
     .btn:active { opacity: 0.7; transform: scale(0.96); }
@@ -126,10 +125,59 @@
     }
 
     /* エディタ内のメディアスタイル */
-    #editor img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
-    #editor video { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
+    #editor img, #editor video { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
     #editor audio { max-width: 100%; margin: 10px 0; display: block; }
 
+    /* ロード中表示 */
+    #loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255,255,255,0.8);
+        z-index: 3000;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-weight: bold;
+        color: #333;
+    }
+
+    /* --- 保存先選択モーダル --- */
+    #save-modal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 350px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        text-align: center;
+    }
+    .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #333; }
+    .modal-btn {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        color: white;
+    }
+    .btn-local { background-color: #27ae60; }
+    .btn-share { background-color: #e67e22; }
+    .btn-cancel { background-color: #95a5a6; margin-top: 10px; }
+    
     @media (max-width: 450px) {
       header { padding: 8px; gap: 6px; }
       #filename-wrapper { min-width: 100%; order: 1; margin-bottom: 4px; }
@@ -156,20 +204,21 @@
     <div class="btn-group">
       <button class="btn btn-open btn-icon" onclick="document.getElementById('file-opener').click()" title="開く">📂</button>
       
-      <button class="btn btn-camera btn-icon" onclick="document.getElementById('camera-input').click()" title="写真撮影">📸</button>
-      <button class="btn btn-video btn-icon" onclick="document.getElementById('video-input').click()" title="動画撮影">🎥</button>
+      <button class="btn btn-camera btn-icon" onclick="document.getElementById('camera-input').click()" title="写真">📸</button>
+      <button class="btn btn-video btn-icon" onclick="document.getElementById('video-input').click()" title="動画">🎥</button>
       <button class="btn btn-mic btn-icon" onclick="document.getElementById('mic-input').click()" title="録音">🎙️</button>
       
-      <button class="btn btn-media btn-icon" onclick="document.getElementById('media-inserter').click()" title="ファイル挿入">🖼️</button>
+      <button class="btn btn-media btn-icon" onclick="document.getElementById('media-inserter').click()" title="挿入">🖼️</button>
       
-      <button class="btn btn-save" id="save-btn">💾</button>
+      <button class="btn btn-save" id="save-menu-btn">💾</button>
     </div>
     
     <input type="file" id="file-opener" class="hidden-input" accept=".html,.htm,.txt,.md,.js,.csv,.py">
     
     <input type="file" id="camera-input" class="hidden-input" accept="image/*" capture="environment">
     <input type="file" id="video-input" class="hidden-input" accept="video/*" capture="environment">
-    <input type="file" id="mic-input" class="hidden-input" accept="audio/*" capture>
+    
+    <input type="file" id="mic-input" class="hidden-input" accept="audio/*">
     
     <input type="file" id="media-inserter" class="hidden-input" accept="image/*,video/*,audio/*">
   </header>
@@ -178,25 +227,41 @@
     <div id="editor" contenteditable="true"></div>
   </main>
 
+  <div id="loading-overlay">
+      <div>処理中...</div>
+      <div style="font-size:12px; margin-top:5px;">動画の変換に時間がかかる場合があります</div>
+  </div>
+
+  <div id="save-modal">
+      <div class="modal-content">
+          <div class="modal-title">保存先を選択</div>
+          <button class="modal-btn btn-local" onclick="executeSave('download')">⬇️ ローカルに保存<br><span style="font-size:12px; font-weight:normal">(ダウンロード)</span></button>
+          <button class="modal-btn btn-share" onclick="executeSave('share')">📤 連携 / 共有<br><span style="font-size:12px; font-weight:normal">(LINE, Drive, AirDropなど)</span></button>
+          <button class="modal-btn btn-cancel" onclick="closeModal()">キャンセル</button>
+      </div>
+  </div>
+
   <script>
-    // --- 要素取得 ---
     const editor = document.getElementById('editor');
     const filenameInput = document.getElementById('filename-input');
     const extSelect = document.getElementById('ext-select');
+    const saveModal = document.getElementById('save-modal');
+    const loadingOverlay = document.getElementById('loading-overlay');
     let savedRange = null;
 
-    // --- 日時生成ロジック ---
-    function getTimestampName() {
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const hh = String(now.getHours()).padStart(2, '0');
-      const nn = String(now.getMinutes()).padStart(2, '0');
-      return `memo_${yyyy}${mm}${dd}_${hh}${nn}`;
+    // 軽量化のためにファイルオブジェクトをメモリに一時保存するマップ
+    // key: uniqueId, value: File Object
+    const fileCache = {};
+
+    function generateId() {
+        return 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
-    // --- ファイル名の更新ロジック ---
+    function getTimestampName() {
+      const now = new Date();
+      return `memo_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    }
+
     function autoUpdateFilename() {
        const currentVal = filenameInput.value;
        const pattern = /^memo_\d{8}_\d{4}$/; 
@@ -210,19 +275,27 @@
         if (document.visibilityState === "visible") autoUpdateFilename();
     });
 
-    // --- LocalStorageへの自動保存機能 ---
+    // --- 自動保存 (テキストのみ) ---
+    // ※動画データをLocalStorageに入れると容量オーバーでクラッシュするため、テキストのみ保存します
     function autoSave() {
+        // 現在のエディタの内容をコピー
+        let contentClone = editor.cloneNode(true);
+        // メディアタグをプレースホルダーに置換（容量対策）
+        const medias = contentClone.querySelectorAll('img, video, audio');
+        medias.forEach(el => {
+            if(el.dataset.fileId) {
+                el.removeAttribute('src'); // src(blob)を消す
+                el.dataset.saved = "unsaved_media"; 
+            }
+        });
+
         const data = {
             filename: filenameInput.value,
             ext: extSelect.value,
-            content: editor.innerHTML,
+            content: contentClone.innerHTML,
             timestamp: Date.now()
         };
-        try {
-            localStorage.setItem('memo_autosave', JSON.stringify(data));
-        } catch(e) {
-            console.warn("Storage full or error", e);
-        }
+        try { localStorage.setItem('memo_autosave', JSON.stringify(data)); } catch(e) {}
     }
 
     let saveTimer;
@@ -230,7 +303,6 @@
         clearTimeout(saveTimer);
         saveTimer = setTimeout(autoSave, 2000);
     });
-    
     filenameInput.addEventListener('input', autoSave);
     extSelect.addEventListener('change', autoSave);
 
@@ -241,79 +313,107 @@
             filenameInput.value = data.filename;
             extSelect.value = data.ext;
             editor.innerHTML = data.content;
+            
+            // プレースホルダーの復元メッセージ
+            const unsaved = editor.querySelectorAll('[data-saved="unsaved_media"]');
+            if(unsaved.length > 0) {
+                alert("前回の編集セッションからテキストを復元しました。\n注意: 自動保存には画像・動画データは含まれません。");
+            }
         }
     });
 
-    // --- エディタ関連 ---
+    // --- カーソル管理 ---
     editor.addEventListener('blur', () => {
       const sel = window.getSelection();
       if (sel.rangeCount > 0) savedRange = sel.getRangeAt(0);
     });
 
-    function insertNode(node) {
-      editor.focus();
-      const sel = window.getSelection();
-      if (savedRange) { sel.removeAllRanges(); sel.addRange(savedRange); }
-      
-      let range = sel.rangeCount > 0 ? sel.getRangeAt(0) : document.createRange();
-      if (sel.rangeCount === 0) {
-          range.selectNodeContents(editor);
-          range.collapse(false);
-          sel.addRange(range);
-      }
-      
-      range.insertNode(node);
-      range.setStartAfter(node);
-      range.setEndAfter(node);
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand('insertHTML', false, '<br><br>');
-      autoSave();
+    function restoreSelection() {
+        editor.focus();
+        const sel = window.getSelection();
+        if (savedRange) { sel.removeAllRanges(); sel.addRange(savedRange); }
+        if (sel.rangeCount === 0) {
+            let range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(false);
+            sel.addRange(range);
+        }
+        return sel.getRangeAt(0);
     }
 
-    // メディアファイル処理（画像・動画・音声）
+    function insertNode(node) {
+        let range = restoreSelection();
+        range.deleteContents();
+        
+        // 要素挿入
+        range.insertNode(node);
+        
+        // カーソルを要素の後ろに移動させて改行を入れる（これが文字入力できない問題の特効薬）
+        range.setStartAfter(node);
+        range.setEndAfter(node);
+        
+        const br = document.createElement('br');
+        range.insertNode(br);
+        range.setStartAfter(br);
+        range.setEndAfter(br);
+        
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        
+        // スクロール調整
+        node.scrollIntoView({behavior: "smooth", block: "center"});
+        
+        // テキストのみ自動保存
+        autoSave(); 
+    }
+
+    // --- ファイルハンドリング (軽量化対応) ---
     function handleFile(file) {
       if(!file) return;
       
-      const type = file.type;
-      const reader = new FileReader();
+      // ユニークID生成
+      const fileId = generateId();
+      // ファイルをメモリ(変数)に保存。DOMには直接埋め込まない！
+      fileCache[fileId] = file;
 
-      reader.onload = (e) => {
-          let el;
-          if (type.startsWith('image/')) {
-              el = document.createElement('img');
-              el.src = e.target.result;
-          } else if (type.startsWith('video/')) {
-              el = document.createElement('video');
-              el.src = e.target.result;
-              el.controls = true;
-          } else if (type.startsWith('audio/')) {
-              el = document.createElement('audio');
-              el.src = e.target.result;
-              el.controls = true;
-          }
-          if(el) insertNode(el);
-      };
-      reader.readAsDataURL(file);
+      // プレビュー用のURL作成 (Base64ではなくBlob URLを使う＝爆速)
+      const blobUrl = URL.createObjectURL(file);
+      
+      const type = file.type;
+      let el;
+      
+      if (type.startsWith('image/')) {
+          el = document.createElement('img');
+          el.src = blobUrl;
+      } else if (type.startsWith('video/')) {
+          el = document.createElement('video');
+          el.src = blobUrl;
+          el.controls = true;
+          // iOS等でのインライン再生設定
+          el.setAttribute('playsinline', ''); 
+      } else if (type.startsWith('audio/')) {
+          el = document.createElement('audio');
+          el.src = blobUrl;
+          el.controls = true;
+      }
+
+      if(el) {
+          // 保存時に復活させるためのIDを付与
+          el.dataset.fileId = fileId;
+          insertNode(el);
+      }
     }
 
-    // イベントリスナー設定
-    const inputs = ['camera-input', 'video-input', 'mic-input', 'media-inserter'];
-    inputs.forEach(id => {
-        document.getElementById(id).addEventListener('change', function(e){
-            handleFile(e.target.files[0]);
-            this.value = '';
-        });
+    ['camera-input', 'video-input', 'mic-input', 'media-inserter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', function(e){ handleFile(e.target.files[0]); this.value = ''; });
     });
 
-    // ファイルを開く処理
     document.getElementById('file-opener').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(event) {
-        let content = event.target.result;
         const name = file.name;
         const lastDot = name.lastIndexOf('.');
         if (lastDot !== -1) {
@@ -321,75 +421,118 @@
           const ext = name.substring(lastDot + 1).toLowerCase();
           const opts = Array.from(extSelect.options).map(o => o.value);
           extSelect.value = opts.includes(ext) ? ext : 'txt';
-
+          
           if(ext === 'html' || ext === 'htm') {
             const parser = new DOMParser();
-            const doc = parser.parseFromString(content, 'text/html');
+            const doc = parser.parseFromString(event.target.result, 'text/html');
             const savedContent = doc.querySelector('#saved-content');
             editor.innerHTML = savedContent ? savedContent.innerHTML : doc.body.innerHTML;
           } else {
-            editor.innerText = content;
+            editor.innerText = event.target.result;
           }
-          autoSave();
         }
       };
       reader.readAsText(file);
       this.value = '';
     });
 
-    // --- 保存処理 ---
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      try {
-        autoSave();
-        autoUpdateFilename();
-        
-        const name = filenameInput.value;
-        const ext = extSelect.value;
-        const fullName = `${name}.${ext}`;
-        
-        let content = '';
-        let mime = 'text/plain';
-
-        if (ext === 'html') {
-            mime = 'text/html';
-            content = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>body{font-family:sans-serif;padding:20px;line-height:1.6;max-width:800px;margin:0 auto}img,video{max-width:100%;height:auto}audio{width:100%}</style></head><body><div id="saved-content">${editor.innerHTML}</div></body></html>`;
-        } else if (ext === 'md') {
-            mime = 'text/markdown';
-            content = editor.innerText;
-        } else {
-            content = editor.innerText;
-        }
-
-        const blob = new Blob([content], { type: mime });
-        const fileObj = new File([blob], fullName, { type: mime });
-
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileObj] })) {
-            await navigator.share({
-                files: [fileObj],
-                title: fullName,
-            });
-            return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fullName;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        
-        setTimeout(() => {
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        }, 100);
-
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-            alert("保存エラー: " + e.message);
-        }
-      }
+    // --- 保存モーダル制御 ---
+    document.getElementById('save-menu-btn').addEventListener('click', () => {
+        saveModal.style.display = 'flex';
     });
+    function closeModal() {
+        saveModal.style.display = 'none';
+    }
+
+    // --- File -> Base64 変換プロミス ---
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // --- 保存実行処理 (ここで初めて重い処理を行う) ---
+    async function executeSave(mode) {
+        closeModal();
+        loadingOverlay.style.display = 'flex'; // ローディング表示
+
+        try {
+            // ファイル名更新
+            autoUpdateFilename();
+            const name = filenameInput.value;
+            const ext = extSelect.value;
+            const fullName = `${name}.${ext}`;
+            
+            // 保存用コンテンツの作成（現在のDOMをコピー）
+            let contentClone = editor.cloneNode(true);
+            
+            // 埋め込み処理: fileCacheにあるファイルをBase64にしてsrcに入れる
+            const mediaElements = contentClone.querySelectorAll('[data-file-id]');
+            
+            for (let el of mediaElements) {
+                const fid = el.dataset.fileId;
+                if (fileCache[fid]) {
+                    try {
+                        // ここで初めてBase64化する（重い処理）
+                        const base64Data = await fileToBase64(fileCache[fid]);
+                        el.src = base64Data;
+                        // Blob URLは保存ファイルには不要なのでsrcを上書きでOK
+                    } catch(err) {
+                        console.error("Convert error", err);
+                    }
+                }
+            }
+
+            // HTML組み立て
+            let finalContent = '', mime = 'text/plain';
+            if (ext === 'html') {
+                mime = 'text/html';
+                finalContent = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>body{font-family:sans-serif;padding:20px;line-height:1.6;max-width:800px;margin:0 auto}img,video{max-width:100%;height:auto}audio{width:100%}</style></head><body><div id="saved-content">${contentClone.innerHTML}</div></body></html>`;
+            } else {
+                finalContent = editor.innerText;
+                if(ext === 'md') mime = 'text/markdown';
+            }
+
+            const blob = new Blob([finalContent], { type: mime });
+
+            // A. シェア/連携モード (Web Share API)
+            if (mode === 'share') {
+                if (navigator.share && navigator.canShare) {
+                    const fileObj = new File([blob], fullName, { type: mime });
+                    if (navigator.canShare({ files: [fileObj] })) {
+                        await navigator.share({ files: [fileObj], title: fullName });
+                        loadingOverlay.style.display = 'none';
+                        return;
+                    }
+                }
+                alert("このブラウザは共有機能に対応していません。ダウンロードを実行します。");
+                mode = 'download'; 
+            }
+
+            // B. ローカル保存 (Download)
+            if (mode === 'download') {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fullName;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+            }
+
+        } catch (e) {
+            alert("エラー: " + e.message);
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
   </script>
 </body>
 </html>
