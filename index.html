@@ -87,13 +87,13 @@
     }
     .btn-icon { font-size: 20px; min-width: 40px; padding: 0; }
     
-    .btn-open { background-color: #7f8c8d; }
-    .btn-camera { background-color: #e74c3c; }
-    .btn-video { background-color: #9b59b6; }
+    /* ボタン色設定 */
+    .btn-new { background-color: #16a085; }   /* 新規 (緑) */
+    .btn-open { background-color: #7f8c8d; }  /* 開く (グレー) */
+    .btn-camera { background-color: #e74c3c; } /* 写真 (赤) */
+    .btn-video { background-color: #9b59b6; }  /* 動画 (紫) */
     
-    /* 録音ボタン（通常時） */
-    .btn-mic { background-color: #c0392b; }
-    /* 録音中スタイル */
+    .btn-mic { background-color: #c0392b; }    /* 録音 (濃い赤) */
     .btn-mic.recording { 
         background-color: #ff0000; 
         animation: pulse 1.5s infinite; 
@@ -216,11 +216,12 @@
     </div>
     
     <div class="btn-group">
+      <button class="btn btn-new btn-icon" id="new-btn" title="新規作成">🆕</button>
+      
       <button class="btn btn-open btn-icon" onclick="document.getElementById('file-opener').click()" title="開く">📂</button>
       
       <button class="btn btn-camera btn-icon" onclick="document.getElementById('camera-input').click()" title="写真">📸</button>
       <button class="btn btn-video btn-icon" onclick="document.getElementById('video-input').click()" title="動画">🎥</button>
-      
       <button class="btn btn-mic btn-icon" id="record-btn" title="録音開始/停止">🎙️</button>
       
       <button class="btn btn-media btn-icon" onclick="document.getElementById('media-inserter').click()" title="挿入">🖼️</button>
@@ -231,6 +232,7 @@
     <input type="file" id="file-opener" class="hidden-input" accept=".html,.htm,.txt,.md,.js,.csv,.py">
     <input type="file" id="camera-input" class="hidden-input" accept="image/*" capture="environment">
     <input type="file" id="video-input" class="hidden-input" accept="video/*" capture="environment">
+    <input type="file" id="mic-input" class="hidden-input" accept="audio/*">
     <input type="file" id="media-inserter" class="hidden-input" accept="image/*,video/*,audio/*">
   </header>
 
@@ -261,7 +263,7 @@
     const recordBtn = document.getElementById('record-btn');
     let savedRange = null;
 
-    // ファイルキャッシュ（メモリ内）
+    // ファイルキャッシュ
     const fileCache = {};
 
     function generateId() {
@@ -286,59 +288,57 @@
         if (document.visibilityState === "visible") autoUpdateFilename();
     });
 
-    // --- 録音機能 (MediaRecorder API) ---
+    // --- 新規作成機能 ---
+    document.getElementById('new-btn').addEventListener('click', () => {
+        if (confirm("現在の内容をクリアして、新規作成しますか？\n（未保存の動画などは消えます）")) {
+            editor.innerHTML = '';
+            // ファイル名更新
+            filenameInput.value = getTimestampName();
+            // キャッシュクリア
+            for (const key in fileCache) delete fileCache[key];
+            // 保存
+            autoSave();
+        }
+    });
+
+    // --- 録音機能 (MediaRecorder) ---
     let mediaRecorder = null;
     let audioChunks = [];
     let isRecording = false;
 
     recordBtn.addEventListener('click', async () => {
         if (!isRecording) {
-            // 録音開始
             try {
-                // マイク権限を要求
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
 
                 mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' }); // iOS互換のためmp4/webmを意識
-                    // Blobをファイルとして扱う
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
                     const file = new File([audioBlob], "recording.mp4", { type: "audio/mp4" });
                     handleFile(file);
-                    
-                    // ストリーム停止（マイクアイコンを消すため）
                     stream.getTracks().forEach(track => track.stop());
                 };
 
                 mediaRecorder.start();
                 isRecording = true;
-                
-                // UI変更
                 recordBtn.classList.add('recording');
-                recordBtn.innerHTML = '⏹️'; // 停止アイコン
+                recordBtn.innerHTML = '⏹️'; 
                 
             } catch (err) {
-                alert("マイクへのアクセスが拒否されたか、対応していません。\n(設定でブラウザのマイク権限を許可してください)\n\nエラー: " + err.message);
+                alert("マイク起動エラー:\n" + err.message + "\n\n※この機能はhttpsサイトでのみ動作します");
             }
         } else {
-            // 録音停止
-            if (mediaRecorder) {
-                mediaRecorder.stop();
-            }
+            if (mediaRecorder) mediaRecorder.stop();
             isRecording = false;
-            
-            // UI戻す
             recordBtn.classList.remove('recording');
             recordBtn.innerHTML = '🎙️';
         }
     });
 
-
-    // --- 自動保存 (テキストのみ) ---
+    // --- 自動保存 ---
     function autoSave() {
         let contentClone = editor.cloneNode(true);
         const medias = contentClone.querySelectorAll('img, video, audio');
@@ -373,15 +373,10 @@
             filenameInput.value = data.filename;
             extSelect.value = data.ext;
             editor.innerHTML = data.content;
-            
-            if(editor.querySelectorAll('[data-saved="unsaved_media"]').length > 0) {
-                // メディアは復元できない旨はアラートせず静かに復元
-                console.log("Text restored. Media omitted.");
-            }
         }
     });
 
-    // --- カーソル & 挿入ロジック ---
+    // --- カーソル & 挿入 ---
     editor.addEventListener('blur', () => {
       const sel = window.getSelection();
       if (sel.rangeCount > 0) savedRange = sel.getRangeAt(0);
@@ -424,7 +419,6 @@
     // --- ファイルハンドリング ---
     function handleFile(file) {
       if(!file) return;
-      
       const fileId = generateId();
       fileCache[fileId] = file;
 
