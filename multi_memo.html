@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>multi_memo</title>
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#2c3e50">
+  
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✏️</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22 style=%22background-color: white;%22><rect width=%22100%22 height=%22100%22 fill=%22white%22/><text x=%2250%25%22 y=%2255%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2280%22>✏️</text></svg>">
+
+  <style>
+    /* --- CSS設定 --- */
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      display: flex;
+      flex-direction: column;
+      background-color: #f0f0f0;
+      overscroll-behavior-y: none;
+    }
+
+    header {
+      background-color: #2c3e50;
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 100;
+    }
+
+    #filename-wrapper {
+      flex: 1;
+      display: flex;
+      background: white;
+      border-radius: 6px;
+      overflow: hidden;
+      min-width: 120px;
+    }
+    #filename-input {
+      width: 100%;
+      border: none;
+      padding: 10px;
+      font-size: 16px;
+      outline: none;
+      flex: 1;
+      min-width: 0;
+      border-radius: 0;
+    }
+    #ext-select {
+      background: #eee;
+      color: #333;
+      border: none;
+      border-left: 1px solid #ddd;
+      padding: 0 5px;
+      font-size: 14px;
+      font-weight: bold;
+      outline: none;
+      border-radius: 0;
+      -webkit-appearance: none;
+      text-align: center;
+    }
+
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    .btn {
+      border: none;
+      border-radius: 6px;
+      height: 40px;
+      padding: 0 10px;
+      font-weight: bold;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-icon { font-size: 20px; min-width: 40px; padding: 0; }
+    
+    /* ボタン色設定 */
+    .btn-new { background-color: #16a085; }   /* 新規 (緑) */
+    .btn-open { background-color: #7f8c8d; }  /* 開く (グレー) */
+    .btn-camera { background-color: #e74c3c; } /* 写真 (赤) */
+    .btn-video { background-color: #9b59b6; }  /* 動画 (紫) */
+    
+    .btn-mic { background-color: #c0392b; }    /* 録音 (濃い赤) */
+    .btn-mic.recording { 
+        background-color: #ff0000; 
+        animation: pulse 1.5s infinite; 
+        border: 2px solid white;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+    }
+
+    .btn-media { background-color: #e67e22; }
+    .btn-save { background-color: #3498db; }
+    
+    .btn:active { opacity: 0.7; transform: scale(0.96); }
+
+    .hidden-input { display: none; }
+
+    main {
+      flex: 1;
+      position: relative;
+      background: white;
+      margin: 10px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #editor {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      padding: 15px;
+      font-size: 16px;
+      line-height: 1.6;
+      outline: none;
+      overflow-y: auto;
+      color: #333;
+      font-family: monospace;
+      white-space: pre-wrap; 
+      word-wrap: break-word;
+    }
+
+    #editor img, #editor video { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
+    #editor audio { max-width: 100%; margin: 10px 0; display: block; }
+
+    /* ロード中表示 */
+    #loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255,255,255,0.8);
+        z-index: 3000;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-weight: bold;
+        color: #333;
+    }
+
+    /* 保存モーダル */
+    #save-modal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 350px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        text-align: center;
+    }
+    .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #333; }
+    .modal-btn {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        color: white;
+    }
+    .btn-local { background-color: #27ae60; }
+    .btn-share { background-color: #e67e22; }
+    .btn-cancel { background-color: #95a5a6; margin-top: 10px; }
+    
+    @media (max-width: 450px) {
+      header { padding: 8px; gap: 6px; }
+      #filename-wrapper { min-width: 100%; order: 1; margin-bottom: 4px; }
+      .btn-group { width: 100%; order: 2; display: flex; justify-content: space-between; gap: 4px; }
+      .btn { flex: 1; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div id="filename-wrapper">
+      <input type="text" id="filename-input" placeholder="タイトル">
+      <select id="ext-select">
+        <option value="txt" selected>.txt</option>
+        <option value="md">.md</option>
+        <option value="html">.html</option>
+        <option value="js">.js</option>
+        <option value="csv">.csv</option>
+        <option value="py">.py</option>
+      </select>
+    </div>
+    
+    <div class="btn-group">
+      <button class="btn btn-new btn-icon" id="new-btn" title="新規作成">🆕</button>
+      
+      <button class="btn btn-open btn-icon" onclick="document.getElementById('file-opener').click()" title="開く">📂</button>
+      
+      <button class="btn btn-camera btn-icon" onclick="document.getElementById('camera-input').click()" title="写真">📸</button>
+      <button class="btn btn-video btn-icon" onclick="document.getElementById('video-input').click()" title="動画">🎥</button>
+      <button class="btn btn-mic btn-icon" id="record-btn" title="録音開始/停止">🎙️</button>
+      
+      <button class="btn btn-media btn-icon" onclick="document.getElementById('media-inserter').click()" title="挿入">🖼️</button>
+      
+      <button class="btn btn-save" id="save-menu-btn">💾</button>
+    </div>
+    
+    <input type="file" id="file-opener" class="hidden-input" accept=".html,.htm,.txt,.md,.js,.csv,.py">
+    <input type="file" id="camera-input" class="hidden-input" accept="image/*" capture="environment">
+    <input type="file" id="video-input" class="hidden-input" accept="video/*" capture="environment">
+    <input type="file" id="mic-input" class="hidden-input" accept="audio/*">
+    <input type="file" id="media-inserter" class="hidden-input" accept="image/*,video/*,audio/*">
+  </header>
+
+  <main>
+    <div id="editor" contenteditable="true"></div>
+  </main>
+
+  <div id="loading-overlay">
+      <div>処理中...</div>
+      <div style="font-size:12px; margin-top:5px;">動画変換・保存準備中</div>
+  </div>
+
+  <div id="save-modal">
+      <div class="modal-content">
+          <div class="modal-title">保存先を選択</div>
+          <button class="modal-btn btn-local" onclick="executeSave('download')">⬇️ ローカルに保存<br><span style="font-size:12px; font-weight:normal">(ダウンロード)</span></button>
+          <button class="modal-btn btn-share" onclick="executeSave('share')">📤 連携 / 共有<br><span style="font-size:12px; font-weight:normal">(LINE, Drive, AirDropなど)</span></button>
+          <button class="modal-btn btn-cancel" onclick="closeModal()">キャンセル</button>
+      </div>
+  </div>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const filenameInput = document.getElementById('filename-input');
+    const extSelect = document.getElementById('ext-select');
+    const saveModal = document.getElementById('save-modal');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const recordBtn = document.getElementById('record-btn');
+    let savedRange = null;
+
+    // ファイルキャッシュ
+    const fileCache = {};
+
+    function generateId() {
+        return 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function getTimestampName() {
+      const now = new Date();
+      return `memo_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    }
+
+    function autoUpdateFilename() {
+       const currentVal = filenameInput.value;
+       const pattern = /^memo_\d{8}_\d{4}$/; 
+       if (!currentVal || pattern.test(currentVal)) {
+         filenameInput.value = getTimestampName();
+       }
+    }
+
+    autoUpdateFilename();
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") autoUpdateFilename();
+    });
+
+    // --- 新規作成機能 ---
+    document.getElementById('new-btn').addEventListener('click', () => {
+        if (confirm("現在の内容をクリアして、新規作成しますか？\n（未保存の動画などは消えます）")) {
+            editor.innerHTML = '';
+            // ファイル名更新
+            filenameInput.value = getTimestampName();
+            // キャッシュクリア
+            for (const key in fileCache) delete fileCache[key];
+            // 保存
+            autoSave();
+        }
+    });
+
+    // --- 録音機能 (MediaRecorder) ---
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
+                    const file = new File([audioBlob], "recording.mp4", { type: "audio/mp4" });
+                    handleFile(file);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                recordBtn.classList.add('recording');
+                recordBtn.innerHTML = '⏹️'; 
+                
+            } catch (err) {
+                alert("マイク起動エラー:\n" + err.message + "\n\n※この機能はhttpsサイトでのみ動作します");
+            }
+        } else {
+            if (mediaRecorder) mediaRecorder.stop();
+            isRecording = false;
+            recordBtn.classList.remove('recording');
+            recordBtn.innerHTML = '🎙️';
+        }
+    });
+
+    // --- 自動保存 ---
+    function autoSave() {
+        let contentClone = editor.cloneNode(true);
+        const medias = contentClone.querySelectorAll('img, video, audio');
+        medias.forEach(el => {
+            if(el.dataset.fileId) {
+                el.removeAttribute('src'); 
+                el.dataset.saved = "unsaved_media"; 
+            }
+        });
+
+        const data = {
+            filename: filenameInput.value,
+            ext: extSelect.value,
+            content: contentClone.innerHTML,
+            timestamp: Date.now()
+        };
+        try { localStorage.setItem('memo_autosave', JSON.stringify(data)); } catch(e) {}
+    }
+
+    let saveTimer;
+    editor.addEventListener('input', () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(autoSave, 2000);
+    });
+    filenameInput.addEventListener('input', autoSave);
+    extSelect.addEventListener('change', autoSave);
+
+    window.addEventListener('load', () => {
+        const saved = localStorage.getItem('memo_autosave');
+        if (saved && !editor.innerHTML.trim()) {
+            const data = JSON.parse(saved);
+            filenameInput.value = data.filename;
+            extSelect.value = data.ext;
+            editor.innerHTML = data.content;
+        }
+    });
+
+    // --- カーソル & 挿入 ---
+    editor.addEventListener('blur', () => {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0) savedRange = sel.getRangeAt(0);
+    });
+
+    function restoreSelection() {
+        editor.focus();
+        const sel = window.getSelection();
+        if (savedRange) { sel.removeAllRanges(); sel.addRange(savedRange); }
+        if (sel.rangeCount === 0) {
+            let range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(false);
+            sel.addRange(range);
+        }
+        return sel.getRangeAt(0);
+    }
+
+    function insertNode(node) {
+        let range = restoreSelection();
+        range.deleteContents();
+        range.insertNode(node);
+        
+        range.setStartAfter(node);
+        range.setEndAfter(node);
+        
+        const br = document.createElement('br');
+        range.insertNode(br);
+        range.setStartAfter(br);
+        range.setEndAfter(br);
+        
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        
+        node.scrollIntoView({behavior: "smooth", block: "center"});
+        autoSave(); 
+    }
+
+    // --- ファイルハンドリング ---
+    function handleFile(file) {
+      if(!file) return;
+      const fileId = generateId();
+      fileCache[fileId] = file;
+
+      const blobUrl = URL.createObjectURL(file);
+      const type = file.type;
+      let el;
+      
+      if (type.startsWith('image/')) {
+          el = document.createElement('img');
+          el.src = blobUrl;
+      } else if (type.startsWith('video/')) {
+          el = document.createElement('video');
+          el.src = blobUrl;
+          el.controls = true;
+          el.setAttribute('playsinline', ''); 
+      } else if (type.startsWith('audio/')) {
+          el = document.createElement('audio');
+          el.src = blobUrl;
+          el.controls = true;
+      }
+
+      if(el) {
+          el.dataset.fileId = fileId;
+          insertNode(el);
+      }
+    }
+
+    ['camera-input', 'video-input', 'media-inserter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', function(e){ handleFile(e.target.files[0]); this.value = ''; });
+    });
+
+    document.getElementById('file-opener').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const name = file.name;
+        const lastDot = name.lastIndexOf('.');
+        if (lastDot !== -1) {
+          filenameInput.value = name.substring(0, lastDot);
+          const ext = name.substring(lastDot + 1).toLowerCase();
+          const opts = Array.from(extSelect.options).map(o => o.value);
+          extSelect.value = opts.includes(ext) ? ext : 'txt';
+          
+          if(ext === 'html' || ext === 'htm') {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(event.target.result, 'text/html');
+            const savedContent = doc.querySelector('#saved-content');
+            editor.innerHTML = savedContent ? savedContent.innerHTML : doc.body.innerHTML;
+          } else {
+            editor.innerText = event.target.result;
+          }
+        }
+      };
+      reader.readAsText(file);
+      this.value = '';
+    });
+
+    document.getElementById('save-menu-btn').addEventListener('click', () => {
+        saveModal.style.display = 'flex';
+    });
+    function closeModal() {
+        saveModal.style.display = 'none';
+    }
+
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function executeSave(mode) {
+        closeModal();
+        loadingOverlay.style.display = 'flex';
+
+        try {
+            autoUpdateFilename();
+            const name = filenameInput.value;
+            const ext = extSelect.value;
+            const fullName = `${name}.${ext}`;
+            
+            let contentClone = editor.cloneNode(true);
+            const mediaElements = contentClone.querySelectorAll('[data-file-id]');
+            
+            for (let el of mediaElements) {
+                const fid = el.dataset.fileId;
+                if (fileCache[fid]) {
+                    try {
+                        const base64Data = await fileToBase64(fileCache[fid]);
+                        el.src = base64Data;
+                    } catch(err) {
+                        console.error("Convert error", err);
+                    }
+                }
+            }
+
+            let finalContent = '', mime = 'text/plain';
+            if (ext === 'html') {
+                mime = 'text/html; charset=utf-8'; // charset追加
+                finalContent = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>body{font-family:sans-serif;padding:20px;line-height:1.6;max-width:800px;margin:0 auto}img,video{max-width:100%;height:auto}audio{width:100%}</style></head><body><div id="saved-content">${contentClone.innerHTML}</div></body></html>`;
+            } else {
+                finalContent = editor.innerText;
+                if(ext === 'md') mime = 'text/markdown; charset=utf-8';
+                else mime = 'text/plain; charset=utf-8';
+            }
+
+            // ★修正ポイント: BOM ('\uFEFF') を先頭に付与してBlobを作成
+            const blob = new Blob(['\uFEFF', finalContent], { type: mime });
+
+            if (mode === 'share') {
+                if (navigator.share && navigator.canShare) {
+                    const fileObj = new File([blob], fullName, { type: mime });
+                    if (navigator.canShare({ files: [fileObj] })) {
+                        await navigator.share({ files: [fileObj], title: fullName });
+                        loadingOverlay.style.display = 'none';
+                        return;
+                    }
+                }
+                alert("共有機能非対応。ダウンロードを実行します。");
+                mode = 'download'; 
+            }
+
+            if (mode === 'download') {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fullName;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+            }
+
+        } catch (e) {
+            alert("エラー: " + e.message);
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+  </script>
+</body>
+</html>
