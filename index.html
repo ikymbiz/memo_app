@@ -83,13 +83,28 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: all 0.2s;
     }
     .btn-icon { font-size: 20px; min-width: 40px; padding: 0; }
     
     .btn-open { background-color: #7f8c8d; }
     .btn-camera { background-color: #e74c3c; }
     .btn-video { background-color: #9b59b6; }
+    
+    /* 録音ボタン（通常時） */
     .btn-mic { background-color: #c0392b; }
+    /* 録音中スタイル */
+    .btn-mic.recording { 
+        background-color: #ff0000; 
+        animation: pulse 1.5s infinite; 
+        border: 2px solid white;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+    }
+
     .btn-media { background-color: #e67e22; }
     .btn-save { background-color: #3498db; }
     
@@ -124,7 +139,6 @@
       word-wrap: break-word;
     }
 
-    /* エディタ内のメディアスタイル */
     #editor img, #editor video { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
     #editor audio { max-width: 100%; margin: 10px 0; display: block; }
 
@@ -142,7 +156,7 @@
         color: #333;
     }
 
-    /* --- 保存先選択モーダル --- */
+    /* 保存モーダル */
     #save-modal {
         display: none;
         position: fixed;
@@ -206,7 +220,8 @@
       
       <button class="btn btn-camera btn-icon" onclick="document.getElementById('camera-input').click()" title="写真">📸</button>
       <button class="btn btn-video btn-icon" onclick="document.getElementById('video-input').click()" title="動画">🎥</button>
-      <button class="btn btn-mic btn-icon" onclick="document.getElementById('mic-input').click()" title="録音">🎙️</button>
+      
+      <button class="btn btn-mic btn-icon" id="record-btn" title="録音開始/停止">🎙️</button>
       
       <button class="btn btn-media btn-icon" onclick="document.getElementById('media-inserter').click()" title="挿入">🖼️</button>
       
@@ -214,12 +229,8 @@
     </div>
     
     <input type="file" id="file-opener" class="hidden-input" accept=".html,.htm,.txt,.md,.js,.csv,.py">
-    
     <input type="file" id="camera-input" class="hidden-input" accept="image/*" capture="environment">
     <input type="file" id="video-input" class="hidden-input" accept="video/*" capture="environment">
-    
-    <input type="file" id="mic-input" class="hidden-input" accept="audio/*">
-    
     <input type="file" id="media-inserter" class="hidden-input" accept="image/*,video/*,audio/*">
   </header>
 
@@ -229,7 +240,7 @@
 
   <div id="loading-overlay">
       <div>処理中...</div>
-      <div style="font-size:12px; margin-top:5px;">動画の変換に時間がかかる場合があります</div>
+      <div style="font-size:12px; margin-top:5px;">動画変換・保存準備中</div>
   </div>
 
   <div id="save-modal">
@@ -247,10 +258,10 @@
     const extSelect = document.getElementById('ext-select');
     const saveModal = document.getElementById('save-modal');
     const loadingOverlay = document.getElementById('loading-overlay');
+    const recordBtn = document.getElementById('record-btn');
     let savedRange = null;
 
-    // 軽量化のためにファイルオブジェクトをメモリに一時保存するマップ
-    // key: uniqueId, value: File Object
+    // ファイルキャッシュ（メモリ内）
     const fileCache = {};
 
     function generateId() {
@@ -275,16 +286,65 @@
         if (document.visibilityState === "visible") autoUpdateFilename();
     });
 
+    // --- 録音機能 (MediaRecorder API) ---
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+            // 録音開始
+            try {
+                // マイク権限を要求
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' }); // iOS互換のためmp4/webmを意識
+                    // Blobをファイルとして扱う
+                    const file = new File([audioBlob], "recording.mp4", { type: "audio/mp4" });
+                    handleFile(file);
+                    
+                    // ストリーム停止（マイクアイコンを消すため）
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // UI変更
+                recordBtn.classList.add('recording');
+                recordBtn.innerHTML = '⏹️'; // 停止アイコン
+                
+            } catch (err) {
+                alert("マイクへのアクセスが拒否されたか、対応していません。\n(設定でブラウザのマイク権限を許可してください)\n\nエラー: " + err.message);
+            }
+        } else {
+            // 録音停止
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+            }
+            isRecording = false;
+            
+            // UI戻す
+            recordBtn.classList.remove('recording');
+            recordBtn.innerHTML = '🎙️';
+        }
+    });
+
+
     // --- 自動保存 (テキストのみ) ---
-    // ※動画データをLocalStorageに入れると容量オーバーでクラッシュするため、テキストのみ保存します
     function autoSave() {
-        // 現在のエディタの内容をコピー
         let contentClone = editor.cloneNode(true);
-        // メディアタグをプレースホルダーに置換（容量対策）
         const medias = contentClone.querySelectorAll('img, video, audio');
         medias.forEach(el => {
             if(el.dataset.fileId) {
-                el.removeAttribute('src'); // src(blob)を消す
+                el.removeAttribute('src'); 
                 el.dataset.saved = "unsaved_media"; 
             }
         });
@@ -314,15 +374,14 @@
             extSelect.value = data.ext;
             editor.innerHTML = data.content;
             
-            // プレースホルダーの復元メッセージ
-            const unsaved = editor.querySelectorAll('[data-saved="unsaved_media"]');
-            if(unsaved.length > 0) {
-                alert("前回の編集セッションからテキストを復元しました。\n注意: 自動保存には画像・動画データは含まれません。");
+            if(editor.querySelectorAll('[data-saved="unsaved_media"]').length > 0) {
+                // メディアは復元できない旨はアラートせず静かに復元
+                console.log("Text restored. Media omitted.");
             }
         }
     });
 
-    // --- カーソル管理 ---
+    // --- カーソル & 挿入ロジック ---
     editor.addEventListener('blur', () => {
       const sel = window.getSelection();
       if (sel.rangeCount > 0) savedRange = sel.getRangeAt(0);
@@ -344,11 +403,8 @@
     function insertNode(node) {
         let range = restoreSelection();
         range.deleteContents();
-        
-        // 要素挿入
         range.insertNode(node);
         
-        // カーソルを要素の後ろに移動させて改行を入れる（これが文字入力できない問題の特効薬）
         range.setStartAfter(node);
         range.setEndAfter(node);
         
@@ -361,25 +417,18 @@
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // スクロール調整
         node.scrollIntoView({behavior: "smooth", block: "center"});
-        
-        // テキストのみ自動保存
         autoSave(); 
     }
 
-    // --- ファイルハンドリング (軽量化対応) ---
+    // --- ファイルハンドリング ---
     function handleFile(file) {
       if(!file) return;
       
-      // ユニークID生成
       const fileId = generateId();
-      // ファイルをメモリ(変数)に保存。DOMには直接埋め込まない！
       fileCache[fileId] = file;
 
-      // プレビュー用のURL作成 (Base64ではなくBlob URLを使う＝爆速)
       const blobUrl = URL.createObjectURL(file);
-      
       const type = file.type;
       let el;
       
@@ -390,7 +439,6 @@
           el = document.createElement('video');
           el.src = blobUrl;
           el.controls = true;
-          // iOS等でのインライン再生設定
           el.setAttribute('playsinline', ''); 
       } else if (type.startsWith('audio/')) {
           el = document.createElement('audio');
@@ -399,13 +447,12 @@
       }
 
       if(el) {
-          // 保存時に復活させるためのIDを付与
           el.dataset.fileId = fileId;
           insertNode(el);
       }
     }
 
-    ['camera-input', 'video-input', 'mic-input', 'media-inserter'].forEach(id => {
+    ['camera-input', 'video-input', 'media-inserter'].forEach(id => {
         document.getElementById(id).addEventListener('change', function(e){ handleFile(e.target.files[0]); this.value = ''; });
     });
 
@@ -436,7 +483,6 @@
       this.value = '';
     });
 
-    // --- 保存モーダル制御 ---
     document.getElementById('save-menu-btn').addEventListener('click', () => {
         saveModal.style.display = 'flex';
     });
@@ -444,7 +490,6 @@
         saveModal.style.display = 'none';
     }
 
-    // --- File -> Base64 変換プロミス ---
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -454,39 +499,31 @@
         });
     }
 
-    // --- 保存実行処理 (ここで初めて重い処理を行う) ---
     async function executeSave(mode) {
         closeModal();
-        loadingOverlay.style.display = 'flex'; // ローディング表示
+        loadingOverlay.style.display = 'flex';
 
         try {
-            // ファイル名更新
             autoUpdateFilename();
             const name = filenameInput.value;
             const ext = extSelect.value;
             const fullName = `${name}.${ext}`;
             
-            // 保存用コンテンツの作成（現在のDOMをコピー）
             let contentClone = editor.cloneNode(true);
-            
-            // 埋め込み処理: fileCacheにあるファイルをBase64にしてsrcに入れる
             const mediaElements = contentClone.querySelectorAll('[data-file-id]');
             
             for (let el of mediaElements) {
                 const fid = el.dataset.fileId;
                 if (fileCache[fid]) {
                     try {
-                        // ここで初めてBase64化する（重い処理）
                         const base64Data = await fileToBase64(fileCache[fid]);
                         el.src = base64Data;
-                        // Blob URLは保存ファイルには不要なのでsrcを上書きでOK
                     } catch(err) {
                         console.error("Convert error", err);
                     }
                 }
             }
 
-            // HTML組み立て
             let finalContent = '', mime = 'text/plain';
             if (ext === 'html') {
                 mime = 'text/html';
@@ -498,7 +535,6 @@
 
             const blob = new Blob([finalContent], { type: mime });
 
-            // A. シェア/連携モード (Web Share API)
             if (mode === 'share') {
                 if (navigator.share && navigator.canShare) {
                     const fileObj = new File([blob], fullName, { type: mime });
@@ -508,11 +544,10 @@
                         return;
                     }
                 }
-                alert("このブラウザは共有機能に対応していません。ダウンロードを実行します。");
+                alert("共有機能非対応。ダウンロードを実行します。");
                 mode = 'download'; 
             }
 
-            // B. ローカル保存 (Download)
             if (mode === 'download') {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
